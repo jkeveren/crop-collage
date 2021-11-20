@@ -5,26 +5,53 @@
 #include <random>
 #include <string.h>
 #include <Magick++.h>
+#include <iterator>
 
 using namespace std;
 using namespace Magick;
 
+struct ImageCrop {
+	string fileName{};
+	string cropGeometry{};
+	bool used{};
+};
+
 int main(int argc, char *argv[]) {
 	InitializeMagick("");
 
-	if (argc <= 3) {
-		cerr << "Usage: crop-collage <base directory> <xattr name> <out file>\n";
+	if (argc != 7) {
+		cerr << "Usage: crop-collage <search-directory> <xattr-name> <grid-width> <grid-height> <out-image-width> <out-file>\n";
 		return 1;
 	}
 
 	string baseDirName = argv[1];
 	char *xattrName = argv[2];
-	string outFileName = argv[3];
+	string gridWidthString = argv[3];
+	string gridHeightString = argv[4];
+	string outImageWidthString = argv[5];
+	string outFileName = argv[6];
 
-	printf("Looking for files in \"%s\" with xattr \"%s\" adnd and saving to \"%s\"\n", baseDirName.c_str(), xattrName, outFileName.c_str());
+	int gridWidth;
+	int gridHeight;
+	try {
+		gridWidth = stoi(gridWidthString);
+		gridHeight = stoi(gridHeightString);
+	} catch (...) {
+		cerr << "The grid-width and/or grid-height arguments supplied are not numbers.";
+	}
+	int gridSize = gridWidth * gridHeight;
 
-	vector<Image> images;
-	Image image;
+	int outImageWidth;
+	try {
+		outImageWidth = stoi(outImageWidthString);
+	} catch (...) {
+		cerr << "The out-image-width argument supplied is not a number.";
+	}
+	int tileWidth = outImageWidth / gridWidth;
+	
+	cout << "Looking for files in \"" << baseDirName << "\" with attribute \"" << xattrName << "\". Creating a \"" << gridWidth << "x" << gridHeight << "\" grid and saving to \"" << outFileName << "\"\n";
+
+	vector<ImageCrop> candidates;
 	int bufferLength = 100;
 	for (auto& p: std::filesystem::recursive_directory_iterator(baseDirName)) {
 		string fileName = p.path();
@@ -34,31 +61,49 @@ int main(int argc, char *argv[]) {
 		if (size == -1) {
 			continue;
 		}
-		cerr << "Processing: " << fileName << endl;
-		string geometrySpec(cValue);
-		geometrySpec = geometrySpec.substr(0, size);
+		cout << "Found: " << fileName << endl;
+		string cropGeometry(cValue);
+		cropGeometry = cropGeometry.substr(0, size);
 		
-		image.read(fileName);
-		image.crop(Geometry(geometrySpec));
-		image.scale(Geometry(430, 0));
-		images.push_back(image);
+		ImageCrop candidate{ fileName, cropGeometry, false };
+		candidates.push_back(candidate);
 	}
 
-	unsigned seed = chrono::system_clock::now().time_since_epoch().count();
-	default_random_engine randomEngine(seed);
-	    
-	shuffle(begin(images), end(images), randomEngine);
+	vector<Image> loaded;
+	Image image;
+	int candidateCount = candidates.size();
+	int usedCount = 0;
+	for (int index = 0; usedCount < gridSize && usedCount < candidateCount; index = rand() % candidateCount) {
+		ImageCrop *imageCrop = &(candidates.at(index));
+
+		if (imageCrop->used) {
+			continue;
+		}
+		imageCrop->used = true;
+		usedCount++;
+		
+		cout << "Loading: " << imageCrop->fileName << endl;
+		
+		image.read(imageCrop->fileName);
+		image.crop(Geometry(imageCrop->cropGeometry));
+		image.scale(Geometry(tileWidth, 0));
+		loaded.push_back(image);
+	}
+
+	cout << "Creating collage..." << endl;
 	
 	vector<Image> montage;
 	
 	Montage montageOptions;
 	montageOptions.geometry(Geometry(0,0));
-	montageOptions.tile("9x9");
+	montageOptions.tile(Geometry(gridWidth, gridHeight));
 	montageOptions.backgroundColor(ColorGray(0.5));
 	
-	montageImages(&montage, images.begin(), images.end(), montageOptions);
+	montageImages(&montage, loaded.begin(), loaded.end(), montageOptions);
 	
 	writeImages(montage.begin(), montage.end(), outFileName);
+
+	cout << "Done!" << endl;
 
 	return 0;
 }
