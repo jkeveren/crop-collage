@@ -1,11 +1,8 @@
 #include <iostream>
 #include <filesystem>
 #include <sys/xattr.h>
-#include <algorithm>
 #include <random>
-#include <string.h>
 #include <Magick++.h>
-#include <iterator>
 
 using namespace std;
 using namespace Magick;
@@ -69,6 +66,7 @@ int main(int argc, char *argv[]) {
 		candidates.push_back(candidate);
 	}
 
+	srand (time(NULL));
 	vector<Image> loaded;
 	Image image;
 	int candidateCount = candidates.size();
