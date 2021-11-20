@@ -1,7 +1,7 @@
 #include <iostream>
 #include <filesystem>
-#include <sys/xattr.h>
 #include <random>
+#include <sys/xattr.h>
 #include <Magick++.h>
 
 using namespace std;
@@ -70,22 +70,29 @@ int main(int argc, char *argv[]) {
 	vector<Image> loaded;
 	Image image;
 	int candidateCount = candidates.size();
-	int usedCount = 0;
-	for (int index = 0; usedCount < gridSize && usedCount < candidateCount; index = rand() % candidateCount) {
-		ImageCrop *imageCrop = &(candidates.at(index));
+	int candidateIndex, gridIndex = 0;
+	while (gridIndex < gridSize && gridIndex < candidateCount) {
+		candidateIndex = rand() % candidateCount;
+		ImageCrop *imageCrop = &(candidates.at(candidateIndex));
 
 		if (imageCrop->used) {
 			continue;
 		}
-		imageCrop->used = true;
-		usedCount++;
-		
-		cout << "Loading: " << imageCrop->fileName << endl;
-		
-		image.read(imageCrop->fileName);
-		image.crop(Geometry(imageCrop->cropGeometry));
-		image.scale(Geometry(tileWidth, 0));
-		loaded.push_back(image);
+
+		int rowIndex = floor(float(gridIndex) / float(gridWidth));
+		int columnIndex = gridIndex - rowIndex * gridWidth;
+		cout << "Processing tile " << gridIndex + 1 << " of " << gridSize << " (row: " << rowIndex + 1 << ", column: " << columnIndex + 1 << "): \"" << imageCrop->fileName << "\"" << endl;
+
+		try {
+			imageCrop->used = true;			
+			image.read(imageCrop->fileName);
+			image.crop(Geometry(imageCrop->cropGeometry));
+			image.scale(Geometry(tileWidth, 0));
+			loaded.push_back(image);
+		} catch (...) {
+			cerr << "Error reading loading or processing image \"" << imageCrop->fileName << "\"" << endl;
+		}
+		gridIndex++;
 	}
 
 	cout << "Creating collage..." << endl;
